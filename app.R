@@ -37,22 +37,13 @@ edatopes <- c("B2", "C4", "D6")
 edatope.names <- c("Poor-subxeric", "Medium-mesic", "Rich-hygric")
 
 scenarios <- c("ssp126", "ssp245", "ssp370")
-scenario.names=c("SSP1-2.6", "SSP2-4.5", "RCP8.5")
+scenario.names=c("SSP1-2.6", "SSP2-4.5", "SSP3-7.0")
 
 proj.years <- c(2001, 2021, 2041, 2061, 2081)
 proj.year.names=c("2001-2020", "2021-2040", "2041-2060", "2061-2080", "2081-2100")
 
 hist.years <- c(2001, 2011)
 hist.year.names <- c("2001-2020", "2011-2020")
-
-rcps <- c("rcp45", "rcp85")
-rcp.name=c("RCP4.5", "RCP8.5")
-
-proj.years <- c(2025, 2055, 2085)
-proj.year.name=c("2020s", "2050s", "2080s")
-
-hist.years <- c(1995, 2004, 2005, 2009, 2014, 2018)
-hist.year.name <- c("1991-2000", "1991-2018", "2001-2010", "2001-2018","2011-2018", "2018")
 
 bdy <- readOGR(dsn = paste("bdy/bdy", studyarea, "shp", sep="."))
 P4S.epsg <- CRS ("+init=epsg:4326") # web mercator
@@ -88,7 +79,7 @@ for(i in which(variable.types=="ratio")){clim.meanChange.ratio[,i] <- clim.meanC
 scenario <- read.csv(paste("data/clim.meanChange", studyarea, "csv", sep="."), stringsAsFactors = F)[,c(1:3)]
 scenario[,3] <- substr(scenario[,3],1,4)
 
-rcps <- sort(unique(scenario[,2]))
+scenarios <- sort(unique(scenario[,2]))
 proj.years <- unique(scenario[,3])
 gcms <- unique(scenario[,1])[-1]
 mods <- c("CAN", "CCSM", "CESM", "CSIR", "GISS", "HAD", "MIRE", "MPI", "ENS")
@@ -150,10 +141,10 @@ zones <- names(zone.area)
 bgc.pred.ref <- raster(paste("data/BGC.pred", studyarea, "ref.tif", sep="."))
 bgc.pred.2005 <- raster(paste("data/BGC.pred", studyarea, "2005.tif", sep="."))
 gcm="ensemble"
-rcp="rcp45"
+scenario="ssp245"
 for(gcm in gcms){
   for(proj.year in proj.years[3:5]){
-    assign(paste("bgc.pred", gcm, rcp, proj.year, sep="."), raster(paste("data/BGC.pred", studyarea, gcm, rcp, proj.year, "tif", sep=".")))
+    assign(paste("bgc.pred", gcm, scenario, proj.year, sep="."), raster(paste("data/BGC.pred", studyarea, gcm, scenario, proj.year, "tif", sep=".")))
   }
 }
 levels.bgc <- read.csv("data/levels.bgc.csv")[,1]
@@ -603,13 +594,13 @@ server <- function(input, output, session) {
     
     zonelevel <- if(input$zonelevel==T) T else F
     gcm.focal <- input$gcm.focal
-    rcp <- "rcp45"
+    scenario <- "ssp245"
     proj.year <-  proj.years[as.numeric(input$proj.year)+2]
     transparency <- input$transparency
     
     if(input$maptype==1) X <- bgc.pred.ref
     if(input$maptype==2) X <- bgc.pred.2005
-    if(input$maptype==3) X <- get(paste("bgc.pred", gcm.focal, rcp, proj.year, sep="."))
+    if(input$maptype==3) X <- get(paste("bgc.pred", gcm.focal, scenario, proj.year, sep="."))
     BGC.pred <- levels.bgc[values(X)]
     
     zone.pred <- rep(NA, length(BGC.pred))
@@ -657,7 +648,7 @@ server <- function(input, output, session) {
             if(gcm.focal=="ensemble"){
               suit.ref <- suit[match(levels.bgc[values(bgc.pred.ref)], SiteLookup$BGC)]
               suit.ref[is.na(suit.ref)] <- 4 #set non-suitable to 4
-              change.proj <- values(raster(paste("data/Spp.ChangeSuit", studyarea, spp.focal, edatope, rcp, proj.year, "tif", sep=".")))
+              change.proj <- values(raster(paste("data/Spp.ChangeSuit", studyarea, spp.focal, edatope, scenario, proj.year, "tif", sep=".")))
               temp <- suit.ref-change.proj
               temp[which(temp>3.5)] <- NA #set non-suitable to NA
               temp[which(temp<1)] <- 1 #set non-suitable to NA
@@ -679,7 +670,7 @@ server <- function(input, output, session) {
       if(input$mapspp==2){
         values(X) <- NA
         if(input$maptype==3){
-          if(spp.focal!="none") X <- raster(paste("data/Spp.ChangeSuit", studyarea, spp.focal, edatope, rcp, proj.year, "tif", sep="."))
+          if(spp.focal!="none") X <- raster(paste("data/Spp.ChangeSuit", studyarea, spp.focal, edatope, scenario, proj.year, "tif", sep="."))
           leafletProxy("map") %>%
             addProviderTiles("Esri.WorldTopoMap", group = "Base map") %>%
             addRasterImage(X, colors =  ColScheme.change, method="ngb", opacity = transparency, maxBytes = 6 * 1024 * 1024)%>%
@@ -689,7 +680,7 @@ server <- function(input, output, session) {
       if(input$mapspp==3){
         values(X) <- NA
         if(input$maptype==3){
-          if(spp.focal!="none") X <- raster(paste("data/Spp.binary", studyarea, spp.focal, edatope, rcp, proj.year, "tif", sep="."))
+          if(spp.focal!="none") X <- raster(paste("data/Spp.binary", studyarea, spp.focal, edatope, scenario, proj.year, "tif", sep="."))
           leafletProxy("map") %>%
             addProviderTiles("Esri.WorldTopoMap", group = "Base map") %>%
             addRasterImage(X, colors =  ColScheme.binary, method="ngb", opacity = transparency, maxBytes = 6 * 1024 * 1024)%>%
@@ -717,12 +708,12 @@ server <- function(input, output, session) {
   #Show popup on click
   observeEvent(input$map_click, {
     gcm.focal <- input$gcm.focal
-    rcp <- "rcp45"
+    scenario <- "ssp245"
     proj.year <-  proj.years[as.numeric(input$proj.year)+2]
     
     if(input$maptype==1) X <- bgc.pred.ref
     if(input$maptype==2) X <- bgc.pred.2005
-    if(input$maptype==3) X <- get(paste("bgc.pred", gcm.focal, rcp, proj.year, sep="."))
+    if(input$maptype==3) X <- get(paste("bgc.pred", gcm.focal, scenario, proj.year, sep="."))
     BGC.pred <- levels.bgc[values(X)]
     
     click <- input$map_click
@@ -737,7 +728,7 @@ server <- function(input, output, session) {
   output$scatterPlot <- renderPlot({
     
     # proj.year <- 2055
-    # rcp <- "rcp45"
+    # scenario <- "ssp245"
     # var1 <- "MAT"
     # var2 <- "MAP"
     # ratioscale <- T
@@ -751,7 +742,7 @@ server <- function(input, output, session) {
     # gcm.focal <- "ensemble"
     
     proj.year <-  proj.years[as.numeric(input$proj.year)+2]
-    # rcp <- rcps[as.numeric(input$rcp)]
+    # scenario <- scenarios[as.numeric(input$scenario)]
     var1 <- input$var1
     var2 <- input$var2
     zonelevel <- if(input$zonelevel==T) T else F
@@ -1030,7 +1021,7 @@ server <- function(input, output, session) {
         lines(1-iso, log2(iso), lty=2, lwd=2, col="darkgray")
         # arctext(x = "Growing feasible range", center = c(-1, -28.7), radius = 4.6, start = 0.431*pi , cex = 0.8, stretch = 1.05, col="darkgray", font=2)
         # arctext(x = "Shrinking feasible range", center = c(-1, -29.3), radius = 4.6, start = 0.431*pi , cex = 0.8, stretch = 1.05, col="darkgray", font=2)
-        # mtext(paste(edatope.name[which(edatopes==edatope)], " sites", " (", edatope, ")", sep=""), side=3, line=-1.25, adj= if(edatope=="C4") 0.025 else 0.075, cex=0.7, font=1)
+        # mtext(paste(edatope.names[which(edatopes==edatope)], " sites", " (", edatope, ")", sep=""), side=3, line=-1.25, adj= if(edatope=="C4") 0.025 else 0.075, cex=0.7, font=1)
         
         spp=spps[2]
         for(spp in spps){
@@ -1114,7 +1105,7 @@ server <- function(input, output, session) {
     DT::datatable(modelMetadata, 
                   options = list(pageLength = dim(modelMetadata)[1]), 
                   rownames= FALSE, 
-                  caption = 'Model Metadata. Global model statistics are quoted from Forster et al. (2013, Journal of Geophysical Research): TCR is transient climate response (temperature change in response to a 1%/yr increase in CO2 at time, at point of doubling CO2), ECS is equilibrium climate sensitivity (temperature change in response to an instant doubling of CO2), and deltaT is global mean surface temperature change since preindustrial for RCP4.5 in the 2090s. All values are in degrees Celsius.'
+                  caption = 'Model Metadata. Global model statistics are quoted from Forster et al. (2013, Journal of Geophysical Research): TCR is transient climate response (temperature change in response to a 1%/yr increase in CO2 at time, at point of doubling CO2), ECS is equilibrium climate sensitivity (temperature change in response to an instant doubling of CO2), and deltaT is global mean surface temperature change since preindustrial for SSP2-4.5 in the 2090s. All values are in degrees Celsius.'
     )
   })
   
