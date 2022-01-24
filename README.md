@@ -1,6 +1,8 @@
 # ccsummary-RKB
 An R Shiny app for biogeoclimatic projections and related interpretations for the Kootenay-Boundary Region
 
+[![Lifecycle:Maturing](https://img.shields.io/badge/Lifecycle-Maturing-007EC6)](<Redirect-URL>)
+
 Copyright 2021 Province of British Columbia
 
 Licensed under the Apache License, Version 2.0 (the "License");
