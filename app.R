@@ -31,7 +31,7 @@ library(leaflet.opacity)
 library(sf)
 library(raster)
 
-studyarea <- "LakesTSA"
+studyarea <- "RKB"
 
 edatopes <- c("B2", "C4", "D6")
 edatope.names <- c("Poor-subxeric", "Medium-mesic", "Rich-hygric")
@@ -64,25 +64,25 @@ clim.refMean <- read.csv(paste("data/clim.refMean", studyarea, "csv", sep="."))
 
 variables <- names(clim.meanChange)
 variable.names <- read.csv("data/Variables_ClimateBC.csv")
-variables.select <- variables[c(grep("_wt|_sp|_sm|_at", variables), 225:247)]
+variables.select <- variables[c(grep("_wt|_sp|_sm|_at", variables), 225:272)]
 variables.select <- variables.select[-grep("RH|Rad|MAR", variables.select)]
 
 variable.types <- rep(NA, length(variables))
 variable.types[grep("PPT|DD|PAS|NFFD|Eref|FFP|CMD|MAP|MSP|AHM|SHM|Rad|MAR", variables)] <- "ratio"
-variable.types[grep("Tmax|Tmin|Tave|MAT|MWMT|MCMT|TD|EMT|EXT|bFFP|eFFP", variables)] <- "interval"
+variable.types[grep("Tmax|Tmin|Tave|MAT|MWMT|MCMT|TD|EMT|EXT|bFFP|eFFP|CMI", variables)] <- "interval"
 variable.types[grep("RH", variables)] <- "pct"
 
 # Convert absolute change to relative change for zero-limited variables
 clim.meanChange.ratio <- clim.meanChange
 for(i in which(variable.types=="ratio")){clim.meanChange.ratio[,i] <- clim.meanChange.ratio[,i]/clim.refMean[,i]}  #set zero values to one, to facilitate log-transformation
 
-scenario <- read.csv(paste("data/clim.meanChange", studyarea, "csv", sep="."), stringsAsFactors = F)[,c(1:3)]
-scenario[,3] <- substr(scenario[,3],1,4)
+period <- read.csv(paste("data/clim.meanChange", studyarea, "csv", sep="."), stringsAsFactors = F)[,c(1:3)]
+period[,3] <- substr(period[,3],1,4)
 
-scenarios <- sort(unique(scenario[,2]))
-proj.years <- unique(scenario[,3])
-gcms <- unique(scenario[,1])[-1]
-mods <- c("CAN", "CCSM", "CESM", "CSIR", "GISS", "HAD", "MIRE", "MPI", "ENS")
+scenarios <- sort(unique(period[,2]))
+proj.years <- unique(period[,3])
+gcms <- unique(period[,1])[-1]
+mods <- c("ACC", "BCC", "CNR", "EC", "GFD", "GIS", "MIR", "MPI", "MRI", "ENS")
 
 ColScheme.gcms <- c(brewer.pal(n=length(gcms), "Paired"))
 
@@ -95,7 +95,7 @@ bgc.area <- read.csv(paste("data/PredSum.BGC", studyarea, "csv", sep="."))
 temp <- bgc.area[-which(bgc.area$GCM=="ensemble"),] #remove ensemble vote
 temp.ens <- bgc.area[which(bgc.area$GCM=="ensemble"),] #ensemble vote
 bgc.area <- rbind(temp, temp.ens)
-bgc.area <- bgc.area[,-c(1:3)] # matches the "scenario" table
+bgc.area <- bgc.area[,-c(1:3)] # matches the "period" table
 names(bgc.area) <- substring(names(bgc.area), 6)
 bgc.area[is.na(bgc.area)] <- 0
 bgcs.all <- names(bgc.area)
@@ -139,101 +139,101 @@ zones <- names(zone.area)
 
 # biogeoclimatic spatial data
 bgc.pred.ref <- raster(paste("data/BGC.pred", studyarea, "ref.tif", sep="."))
-bgc.pred.2005 <- raster(paste("data/BGC.pred", studyarea, "2005.tif", sep="."))
+bgc.pred.2001 <- raster(paste("data/BGC.pred", studyarea, "hist.2001.tif", sep="."))
 gcm="ensemble"
 scenario="ssp245"
 for(gcm in gcms){
-  for(proj.year in proj.years[3:5]){
+  for(proj.year in proj.years[-1]){
     assign(paste("bgc.pred", gcm, scenario, proj.year, sep="."), raster(paste("data/BGC.pred", studyarea, gcm, scenario, proj.year, "tif", sep=".")))
   }
 }
 levels.bgc <- read.csv("data/levels.bgc.csv")[,1]
 
-## SPECIES FEASIBILITIES
-SiteLookup <- read.csv("data/SiteLookup.csv", stringsAsFactors = F)
-SuitLookup <- read.csv("data/SuitLookup.csv", stringsAsFactors = F)
-
-spps.all <- vector()
-spps.native <- vector()
-edatope="C4"
-for(edatope in edatopes){
-  
-  #fractional feasibility table
-  suit.area <- read.csv(paste("data/PredSum.suit", studyarea, edatope, "csv", sep="."))
-  temp <- suit.area[-which(suit.area$GCM=="ensemble"),] #remove ensemble vote
-  temp.ens <- suit.area[which(suit.area$GCM=="ensemble"),] #ensemble vote
-  suit.area <- rbind(temp, temp.ens)
-  suit.area <- suit.area[,-c(1:3)] # matches the "scenario" table
-  
-  #species table
-  spp.area <- read.csv(paste("data/PredSum.spp", studyarea, edatope, "csv", sep="."))
-  temp <- spp.area[-which(spp.area$GCM=="ensemble"),] #remove ensemble vote
-  temp.ens <- spp.area[which(spp.area$GCM=="ensemble"),] #ensemble vote
-  spp.area <- rbind(temp, temp.ens)
-  spp.area <- spp.area[,-c(1:3)] # matches the "scenario" table
-  
-  #fractional feasibility table for home range
-  suit.area.home <- read.csv(paste("data/PredSum.suit.home", studyarea, edatope, "csv", sep="."))
-  temp <- suit.area.home[-which(suit.area.home$GCM=="ensemble"),] #remove ensemble vote
-  temp.ens <- suit.area.home[which(suit.area.home$GCM=="ensemble"),] #ensemble vote
-  suit.area.home <- rbind(temp, temp.ens)
-  suit.area.home <- suit.area.home[,-c(1:3)] # matches the "scenario" table
-  
-  #species tablefor home range
-  spp.area.home <- read.csv(paste("data/PredSum.spp.home", studyarea, edatope, "csv", sep="."))
-  temp <- spp.area.home[-which(spp.area.home$GCM=="ensemble"),] #remove ensemble vote
-  temp.ens <- spp.area.home[which(spp.area.home$GCM=="ensemble"),] #ensemble vote
-  spp.area.home <- rbind(temp, temp.ens)
-  spp.area.home <- spp.area.home[,-c(1:3)] # matches the "scenario" table
-  
-  ## spp color scheme
-  colors = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)][-1]
-  colors = colors[-grep("yellow", colors)]
-  set.seed(5)
-  sppcolors <- c(brewer.pal(n=12, "Paired")[-11],sample(colors,dim(spp.area)[1]-11)) # removal of "11" is light yellow, doesn't show up well. 
-  
-  ## calculate persistence and expansion tables
-  suit.persistence <- sweep(suit.area.home, MARGIN=2,unlist(suit.area[1,]), '/' )
-  spp.persistence <- sweep(spp.area.home, MARGIN=2,unlist(spp.area[1,]), '/' )
-  suit.expansion <- sweep(suit.area-suit.area.home, MARGIN=2,unlist(suit.area[1,]), '/' )
-  spp.expansion <- sweep(spp.area-spp.area.home, MARGIN=2,unlist(spp.area[1,]), '/' )
-  
-  ## simplify and structure the area tables
-  totalarea <- sum(suit.area[1,]) #historical distribution 
-  small <- which(apply(suit.area, 2, sum, na.rm=T)/totalarea < 0.5) # establish insignificant species for removal
-  assign(paste("suit.area", edatope, sep="."), suit.area[,-small]) #remove small units and assign to permanent table
-  assign(paste("spp.area", edatope, sep="."), spp.area[,-small]) #remove small units and assign to permanent table
-  assign(paste("spps.all", edatope, sep="."), names(spp.area)[-small])
-  
-  ## simplify and structure the persistence and expansion tables
-  totalarea <- sum(spp.area[1,]) #historical distribution 
-  exotic <- which(spp.area[1,]/totalarea < 0.01) # establish insignificant species for removal
-  assign(paste("suit.persistence", edatope, sep="."), suit.persistence[,-exotic]) #remove exotic units and assign to permanent table
-  assign(paste("spp.persistence", edatope, sep="."), spp.persistence[,-exotic]) #remove exotic units and assign to permanent table
-  assign(paste("suit.expansion", edatope, sep="."), suit.expansion[,-exotic]) #remove exotic units and assign to permanent table
-  assign(paste("spp.expansion", edatope, sep="."), spp.expansion[,-exotic]) #remove exotic units and assign to permanent table
-  assign(paste("spps.native", edatope, sep="."), names(spp.area)[-exotic])
-  
-  spps.all <- c(spps.all, names(spp.area)[-small])
-  spps.native <- c(spps.native, names(spp.area)[-exotic])
-  
-}
-
-spps.all <- unique(spps.all)[order(unique(spps.all))]
-spps.native <- unique(spps.native)[order(unique(spps.native))]
-
-## Color Schemes for species change maps
-breakpoints.suit <-   breakseq <- c(0.5,1.5,2.5,3.5)
-palette.suit <-   c("#006400", "#1E90FF", "#EEC900")
-ColScheme.suit <- colorBin(palette.suit, bins=breakpoints.suit, na.color = NA)
-breakpoints.change <- seq(-3,3,0.5)
-palette.change <- c(brewer.pal(11,"RdBu")[c(1,2,3,4,5,6)], brewer.pal(11,"RdBu")[c(6,7,8,9,10,11)])
-ColScheme.change <- colorBin(palette.change, bins=breakpoints.change, na.color = NA)
-labels.change <- breakpoints.change[-median(1:length(breakpoints.change))]
-breakpoints.binary <- seq(-1,1,0.2)
-palette.binary <- c(brewer.pal(11,"RdBu")[c(1:4,6)], brewer.pal(11,"RdBu")[c(6,8:11)])
-ColScheme.binary <- colorBin(palette.binary, bins=breakpoints.binary, na.color = NA)
-labels.binary <- paste(abs(seq(-.9,.9,0.2))*100, "%", sep="")
+# ## SPECIES FEASIBILITIES
+# SiteLookup <- read.csv("data/SiteLookup.csv", stringsAsFactors = F)
+# SuitLookup <- read.csv("data/SuitLookup.csv", stringsAsFactors = F)
+# 
+# spps.all <- vector()
+# spps.native <- vector()
+# edatope="C4"
+# for(edatope in edatopes){
+#   
+#   #fractional feasibility table
+#   suit.area <- read.csv(paste("data/PredSum.suit", studyarea, edatope, "csv", sep="."))
+#   temp <- suit.area[-which(suit.area$GCM=="ensemble"),] #remove ensemble vote
+#   temp.ens <- suit.area[which(suit.area$GCM=="ensemble"),] #ensemble vote
+#   suit.area <- rbind(temp, temp.ens)
+#   suit.area <- suit.area[,-c(1:3)] # matches the "period" table
+#   
+#   #species table
+#   spp.area <- read.csv(paste("data/PredSum.spp", studyarea, edatope, "csv", sep="."))
+#   temp <- spp.area[-which(spp.area$GCM=="ensemble"),] #remove ensemble vote
+#   temp.ens <- spp.area[which(spp.area$GCM=="ensemble"),] #ensemble vote
+#   spp.area <- rbind(temp, temp.ens)
+#   spp.area <- spp.area[,-c(1:3)] # matches the "period" table
+#   
+#   #fractional feasibility table for home range
+#   suit.area.home <- read.csv(paste("data/PredSum.suit.home", studyarea, edatope, "csv", sep="."))
+#   temp <- suit.area.home[-which(suit.area.home$GCM=="ensemble"),] #remove ensemble vote
+#   temp.ens <- suit.area.home[which(suit.area.home$GCM=="ensemble"),] #ensemble vote
+#   suit.area.home <- rbind(temp, temp.ens)
+#   suit.area.home <- suit.area.home[,-c(1:3)] # matches the "period" table
+#   
+#   #species tablefor home range
+#   spp.area.home <- read.csv(paste("data/PredSum.spp.home", studyarea, edatope, "csv", sep="."))
+#   temp <- spp.area.home[-which(spp.area.home$GCM=="ensemble"),] #remove ensemble vote
+#   temp.ens <- spp.area.home[which(spp.area.home$GCM=="ensemble"),] #ensemble vote
+#   spp.area.home <- rbind(temp, temp.ens)
+#   spp.area.home <- spp.area.home[,-c(1:3)] # matches the "period" table
+#   
+#   ## spp color scheme
+#   colors = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)][-1]
+#   colors = colors[-grep("yellow", colors)]
+#   set.seed(5)
+#   sppcolors <- c(brewer.pal(n=12, "Paired")[-11],sample(colors,dim(spp.area)[1]-11)) # removal of "11" is light yellow, doesn't show up well. 
+#   
+#   ## calculate persistence and expansion tables
+#   suit.persistence <- sweep(suit.area.home, MARGIN=2,unlist(suit.area[1,]), '/' )
+#   spp.persistence <- sweep(spp.area.home, MARGIN=2,unlist(spp.area[1,]), '/' )
+#   suit.expansion <- sweep(suit.area-suit.area.home, MARGIN=2,unlist(suit.area[1,]), '/' )
+#   spp.expansion <- sweep(spp.area-spp.area.home, MARGIN=2,unlist(spp.area[1,]), '/' )
+#   
+#   ## simplify and structure the area tables
+#   totalarea <- sum(suit.area[1,]) #historical distribution 
+#   small <- which(apply(suit.area, 2, sum, na.rm=T)/totalarea < 0.5) # establish insignificant species for removal
+#   assign(paste("suit.area", edatope, sep="."), suit.area[,-small]) #remove small units and assign to permanent table
+#   assign(paste("spp.area", edatope, sep="."), spp.area[,-small]) #remove small units and assign to permanent table
+#   assign(paste("spps.all", edatope, sep="."), names(spp.area)[-small])
+#   
+#   ## simplify and structure the persistence and expansion tables
+#   totalarea <- sum(spp.area[1,]) #historical distribution 
+#   exotic <- which(spp.area[1,]/totalarea < 0.01) # establish insignificant species for removal
+#   assign(paste("suit.persistence", edatope, sep="."), suit.persistence[,-exotic]) #remove exotic units and assign to permanent table
+#   assign(paste("spp.persistence", edatope, sep="."), spp.persistence[,-exotic]) #remove exotic units and assign to permanent table
+#   assign(paste("suit.expansion", edatope, sep="."), suit.expansion[,-exotic]) #remove exotic units and assign to permanent table
+#   assign(paste("spp.expansion", edatope, sep="."), spp.expansion[,-exotic]) #remove exotic units and assign to permanent table
+#   assign(paste("spps.native", edatope, sep="."), names(spp.area)[-exotic])
+#   
+#   spps.all <- c(spps.all, names(spp.area)[-small])
+#   spps.native <- c(spps.native, names(spp.area)[-exotic])
+#   
+# }
+# 
+# spps.all <- unique(spps.all)[order(unique(spps.all))]
+# spps.native <- unique(spps.native)[order(unique(spps.native))]
+# 
+# ## Color Schemes for species change maps
+# breakpoints.suit <-   breakseq <- c(0.5,1.5,2.5,3.5)
+# palette.suit <-   c("#006400", "#1E90FF", "#EEC900")
+# ColScheme.suit <- colorBin(palette.suit, bins=breakpoints.suit, na.color = NA)
+# breakpoints.change <- seq(-3,3,0.5)
+# palette.change <- c(brewer.pal(11,"RdBu")[c(1,2,3,4,5,6)], brewer.pal(11,"RdBu")[c(6,7,8,9,10,11)])
+# ColScheme.change <- colorBin(palette.change, bins=breakpoints.change, na.color = NA)
+# labels.change <- breakpoints.change[-median(1:length(breakpoints.change))]
+# breakpoints.binary <- seq(-1,1,0.2)
+# palette.binary <- c(brewer.pal(11,"RdBu")[c(1:4,6)], brewer.pal(11,"RdBu")[c(6,8:11)])
+# ColScheme.binary <- colorBin(palette.binary, bins=breakpoints.binary, na.color = NA)
+# labels.binary <- paste(abs(seq(-.9,.9,0.2))*100, "%", sep="")
 
 ## SPATIAL DATA
 bgc.simple <- st_read("data/bgc.simple.shp")
@@ -249,7 +249,7 @@ ui <- fluidPage(
              tabPanel("App", 
                       fluidRow(
                         column(2,
-                               helpText("Use this app to explore projected changes in climate variables, biogeoclimatic unit distributions, and tree species feasibility for reforestation. All data are from ClimateBC. See the 'Model Info' tab for model names"),
+                               helpText("Use this app to explore projected changes in climate climate conditions, expressed as shifts in biogeoclimatic units. All data are from ClimateBC. See the 'Model Info' tab for model names"),
                                
                                tags$head(tags$script('$(document).on("shiny:connected", function(e) {
                             Shiny.onInputChange("innerWidth", window.innerWidth);
@@ -262,7 +262,8 @@ ui <- fluidPage(
                                
                                radioButtons("type", inline = FALSE, 
                                             label = "Choose the type of map",
-                                            choices = list("Climate variables" = 1, "Biogeoclimatic units" = 2, "Species feasibility" = 3),
+                                            choices = list("Climate variables" = 1, "Biogeoclimatic units" = 2),
+                                            # choices = list("Climate variables" = 1, "Biogeoclimatic units" = 2, "Species feasibility" = 3),
                                             selected = 2),
                                
                                sliderInput("transparency", label = "Layer transparency", min = 0, 
@@ -270,7 +271,7 @@ ui <- fluidPage(
                                
                                radioButtons("maptype",
                                             label = "Choose a time period",
-                                            choices = list("Reference (1961-1990)" = 1, "Recent (1991-2019)" = 2, "Future" = 3),
+                                            choices = list("Reference (1961-1990)" = 1, "Recent (2001-2020)" = 2, "Future" = 3),
                                             selected = 1),
                                
                                conditionalPanel(
@@ -307,10 +308,11 @@ ui <- fluidPage(
                                       
                                       radioButtons("proj.year", inline = TRUE,
                                                    label = "Choose a future period",
-                                                   choices = list("2011-2040" = 1, "2041-2070" = 2, "2071-2100" = 3),
-                                                   selected = 2),
+                                                   choices = list("2001-2020" = 1, "2021-2040" = 2, "2041-2060" = 3, "2061-2080" = 4, "2081-2100" = 5),
+                                                   # choices = list(proj.year.names[1] = 1, proj.year.names[2] = 2, proj.year.names[3] = 3, proj.year.names[4] = 4, proj.year.names[5] = 5),
+                                                   selected = 3),
                                       
-                                      checkboxInput("recent", label = "Show recent observed climate (1991-2019)", value = T),
+                                      checkboxInput("recent", label = "Show recent observed climate (2001-2020)", value = T),
                                       
                                ),
                                column(6, 
@@ -354,90 +356,90 @@ ui <- fluidPage(
                                         
                                       ),
                                       
-                                      conditionalPanel(
-                                        condition = "input.type == 3",
-                                        
-                                        radioButtons("mapspp", inline = TRUE,
-                                                     label = "Choose a map type",
-                                                     choices = list("Feasibility" = 1, "Change" = 2, "Loss/gain" = 3),
-                                                     selected = 1),
-                                        
-                                        radioButtons("plotspp", inline = TRUE,
-                                                     label = "Choose a plot type",
-                                                     choices = list("Area" = 1, "Persistence" = 2),
-                                                     selected = 1),
-                                        
-                                        checkboxInput("fractional", label = "Use fractional (partial) feasibilities", value = F),
-                                        
-                                        radioButtons("edatope", inline = TRUE, 
-                                                     label = "Select an edatope (site type)",
-                                                     choices = as.list(edatopes),
-                                                     selected = edatopes[2]),
-                                        
-                                        conditionalPanel(
-                                          condition = "input.plotspp == 1",
-                                          
-                                          conditionalPanel(
-                                            condition = "input.edatope == 'B2'",
-                                            
-                                            radioButtons("spp.focal.1.B2", inline = TRUE,
-                                                         label = "Select a species for ensemble detail",
-                                                         choices = as.list(c("none", spps.all.B2)),
-                                                         selected = "none")
-                                          ),
-                                          
-                                          conditionalPanel(
-                                            condition = "input.edatope == 'C4'",
-                                            
-                                            radioButtons("spp.focal.1.C4", inline = TRUE,
-                                                         label = "Select a species for ensemble detail",
-                                                         choices = as.list(c("none", spps.all.C4)),
-                                                         selected = "none")
-                                          ),
-                                          
-                                          conditionalPanel(
-                                            condition = "input.edatope == 'D6'",
-                                            
-                                            radioButtons("spp.focal.1.D6", inline = TRUE,
-                                                         label = "Select a species for ensemble detail",
-                                                         choices = as.list(c("none", spps.all.D6)),
-                                                         selected = "none")
-                                          ),
-                                          
-                                        ),
-                                        
-                                        conditionalPanel(
-                                          condition = "input.plotspp == 2",
-                                          
-                                          conditionalPanel(
-                                            condition = "input.edatope == 'B2'",
-                                            
-                                            radioButtons("spp.focal.2.B2", inline = TRUE,
-                                                         label = "Select a species for ensemble detail",
-                                                         choices = as.list(c("none", spps.native.B2)),
-                                                         selected = "none")
-                                          ),
-                                          
-                                          conditionalPanel(
-                                            condition = "input.edatope == 'C4'",
-                                            
-                                            radioButtons("spp.focal.2.C4", inline = TRUE,
-                                                         label = "Select a species for ensemble detail",
-                                                         choices = as.list(c("none", spps.native.C4)),
-                                                         selected = "none")
-                                          ),
-                                          
-                                          conditionalPanel(
-                                            condition = "input.edatope == 'D6'",
-                                            
-                                            radioButtons("spp.focal.2.D6", inline = TRUE,
-                                                         label = "Select a species for ensemble detail",
-                                                         choices = as.list(c("none", spps.native.D6)),
-                                                         selected = "none")
-                                          ),
-                                        ),
-                                        
-                                      ),
+                                      # conditionalPanel(
+                                      #   condition = "input.type == 3",
+                                      #   
+                                      #   radioButtons("mapspp", inline = TRUE,
+                                      #                label = "Choose a map type",
+                                      #                choices = list("Feasibility" = 1, "Change" = 2, "Loss/gain" = 3),
+                                      #                selected = 1),
+                                      #   
+                                      #   radioButtons("plotspp", inline = TRUE,
+                                      #                label = "Choose a plot type",
+                                      #                choices = list("Area" = 1, "Persistence" = 2),
+                                      #                selected = 1),
+                                      #   
+                                      #   checkboxInput("fractional", label = "Use fractional (partial) feasibilities", value = F),
+                                      #   
+                                      #   radioButtons("edatope", inline = TRUE, 
+                                      #                label = "Select an edatope (site type)",
+                                      #                choices = as.list(edatopes),
+                                      #                selected = edatopes[2]),
+                                      #   
+                                      #   conditionalPanel(
+                                      #     condition = "input.plotspp == 1",
+                                      #     
+                                      #     conditionalPanel(
+                                      #       condition = "input.edatope == 'B2'",
+                                      #       
+                                      #       radioButtons("spp.focal.1.B2", inline = TRUE,
+                                      #                    label = "Select a species for ensemble detail",
+                                      #                    choices = as.list(c("none", spps.all.B2)),
+                                      #                    selected = "none")
+                                      #     ),
+                                      #     
+                                      #     conditionalPanel(
+                                      #       condition = "input.edatope == 'C4'",
+                                      #       
+                                      #       radioButtons("spp.focal.1.C4", inline = TRUE,
+                                      #                    label = "Select a species for ensemble detail",
+                                      #                    choices = as.list(c("none", spps.all.C4)),
+                                      #                    selected = "none")
+                                      #     ),
+                                      #     
+                                      #     conditionalPanel(
+                                      #       condition = "input.edatope == 'D6'",
+                                      #       
+                                      #       radioButtons("spp.focal.1.D6", inline = TRUE,
+                                      #                    label = "Select a species for ensemble detail",
+                                      #                    choices = as.list(c("none", spps.all.D6)),
+                                      #                    selected = "none")
+                                      #     ),
+                                      #     
+                                      #   ),
+                                      #   
+                                      #   conditionalPanel(
+                                      #     condition = "input.plotspp == 2",
+                                      #     
+                                      #     conditionalPanel(
+                                      #       condition = "input.edatope == 'B2'",
+                                      #       
+                                      #       radioButtons("spp.focal.2.B2", inline = TRUE,
+                                      #                    label = "Select a species for ensemble detail",
+                                      #                    choices = as.list(c("none", spps.native.B2)),
+                                      #                    selected = "none")
+                                      #     ),
+                                      #     
+                                      #     conditionalPanel(
+                                      #       condition = "input.edatope == 'C4'",
+                                      #       
+                                      #       radioButtons("spp.focal.2.C4", inline = TRUE,
+                                      #                    label = "Select a species for ensemble detail",
+                                      #                    choices = as.list(c("none", spps.native.C4)),
+                                      #                    selected = "none")
+                                      #     ),
+                                      #     
+                                      #     conditionalPanel(
+                                      #       condition = "input.edatope == 'D6'",
+                                      #       
+                                      #       radioButtons("spp.focal.2.D6", inline = TRUE,
+                                      #                    label = "Select a species for ensemble detail",
+                                      #                    choices = as.list(c("none", spps.native.D6)),
+                                      #                    selected = "none")
+                                      #     ),
+                                      #   ),
+                                      #   
+                                      # ),
                                       
                                       
                                       
@@ -587,7 +589,7 @@ server <- function(input, output, session) {
   
   observe({
     
-    # proj.year <- 2055
+    # proj.year <- 2041
     # zonelevel=F
     # transparency <- 0.7
     # gcm.focal <- gcms[2]
@@ -595,11 +597,11 @@ server <- function(input, output, session) {
     zonelevel <- if(input$zonelevel==T) T else F
     gcm.focal <- input$gcm.focal
     scenario <- "ssp245"
-    proj.year <-  proj.years[as.numeric(input$proj.year)+2]
+    proj.year <-  proj.years[as.numeric(input$proj.year)+1]
     transparency <- input$transparency
     
     if(input$maptype==1) X <- bgc.pred.ref
-    if(input$maptype==2) X <- bgc.pred.2005
+    if(input$maptype==2) X <- bgc.pred.2001
     if(input$maptype==3) X <- get(paste("bgc.pred", gcm.focal, scenario, proj.year, sep="."))
     BGC.pred <- levels.bgc[values(X)]
     
@@ -709,10 +711,10 @@ server <- function(input, output, session) {
   observeEvent(input$map_click, {
     gcm.focal <- input$gcm.focal
     scenario <- "ssp245"
-    proj.year <-  proj.years[as.numeric(input$proj.year)+2]
+    proj.year <-  proj.years[as.numeric(input$proj.year)+1]
     
     if(input$maptype==1) X <- bgc.pred.ref
-    if(input$maptype==2) X <- bgc.pred.2005
+    if(input$maptype==2) X <- bgc.pred.2001
     if(input$maptype==3) X <- get(paste("bgc.pred", gcm.focal, scenario, proj.year, sep="."))
     BGC.pred <- levels.bgc[values(X)]
     
@@ -727,7 +729,7 @@ server <- function(input, output, session) {
   
   output$scatterPlot <- renderPlot({
     
-    # proj.year <- 2055
+    # proj.year <- 2041
     # scenario <- "ssp245"
     # var1 <- "MAT"
     # var2 <- "MAP"
@@ -741,15 +743,15 @@ server <- function(input, output, session) {
     # recent <- T
     # gcm.focal <- "ensemble"
     
-    proj.year <-  proj.years[as.numeric(input$proj.year)+2]
+    proj.year <-  proj.years[as.numeric(input$proj.year)+1]
     # scenario <- scenarios[as.numeric(input$scenario)]
     var1 <- input$var1
     var2 <- input$var2
     zonelevel <- if(input$zonelevel==T) T else F
     unit.focal <- if(zonelevel==T) input$zone.focal else input$bgc.focal
     units <- if(zonelevel==T) zones else bgcs
-    fractional <- if(input$fractional==T) T else F
-    edatope <- input$edatope
+    # fractional <- if(input$fractional==T) T else F
+    # edatope <- input$edatope
     recent <- input$recent
     gcm.focal <- input$gcm.focal
     
@@ -774,10 +776,9 @@ server <- function(input, output, session) {
       
       par(mar=c(3,4,0,1), mgp=c(1.25, 0.25,0), cex=1.5)
       plot(x,y,col="white", tck=0, xaxt="n", yaxt="n", xlim=xlim, ylim=ylim, ylab="",
-           xlab=paste("Change in", variable.names$Variable[which(variable.names$Code==var1)]), 
-      )
+           xlab=paste("Change in", if(var1%in%variable.names$Code) variable.names$Variable[which(variable.names$Code==var1)] else var1))
       par(mgp=c(2.5,0.25, 0))
-      title(ylab=paste("Change in", variable.names$Variable[which(variable.names$Code==var2)]))
+      title(ylab=paste("Change in", if(var2%in%variable.names$Code) variable.names$Variable[which(variable.names$Code==var2)] else var2))
       lines(c(0,0), c(-99,99), lty=2, col="gray")
       lines(c(-99,99), c(0,0), lty=2, col="gray")
       
@@ -785,13 +786,13 @@ server <- function(input, output, session) {
         x1 <- data[2, which(variables==var1)]
         y1 <- data[2, which(variables==var2)]
         points(x1,y1, pch=16, col="gray", cex=2.5)
-        text(x1,y1, "1991-2019", cex=1.15, font=2, pos=4, col="gray", offset=0.9)  
+        text(x1,y1, "2001-2020", cex=1.15, font=2, pos=4, col="gray", offset=0.9)  
       }
       
       for(gcm in gcms){
         i=which(gcms==gcm)
-        x2 <- data[c(1, which(scenario[,1]==gcm)), which(variables==var1)]
-        y2 <- data[c(1, which(scenario[,1]==gcm)), which(variables==var2)]
+        x2 <- data[c(1, which(period[,1]==gcm)), which(variables==var1)]
+        y2 <- data[c(1, which(period[,1]==gcm)), which(variables==var2)]
         if(length(unique(sign(diff(x2))))==1){
           x3 <- if(unique(sign(diff(x2)))==-1) rev(x2) else x2
           y3 <- if(unique(sign(diff(x2)))==-1) rev(y2) else y2
@@ -834,10 +835,10 @@ server <- function(input, output, session) {
       axis(1, at=pretty(x), labels=pretty(x), tck=0)
       axis(2, at=pretty(ylim), labels=pretty(ylim)/1000, tck=0, las=2)
       
-      lines(rep(x[which(scenario[,1]==gcm.focal & scenario[,3]==proj.year)], 2), ylim, col="gray90", lwd=2)
+      lines(rep(x[which(period[,1]==gcm.focal & period[,3]==proj.year)], 2), ylim, col="gray90", lwd=2)
       
-      increasing <- data[which(scenario$GCM==gcm.focal & scenario$proj.year==2085),]>data[1,]
-      order.increasing <- rev(order(data[which(scenario$GCM==gcm.focal & scenario$proj.year==2085),increasing==T]))
+      increasing <- data[which(period$GCM==gcm.focal & period$proj.year==2081),]>data[1,]
+      order.increasing <- rev(order(data[which(period$GCM==gcm.focal & period$proj.year==2081),increasing==T]))
       order.decreasing <- rev(order(data[1,increasing==F]))
       units.increasing <- units[increasing==T][order.increasing]
       units.decreasing <- units[increasing==F][order.decreasing]
@@ -850,8 +851,8 @@ server <- function(input, output, session) {
         i <- which(units.sort==unit)
         col.focal <- if(unit.focal=="none") ColScheme$colour[which(ColScheme$classification==unit)] else "lightgray"
         col.focal2 <- if(unit.focal=="none") "black" else "darkgray"
-        x1 <- x[c(1, which(scenario[,1]==gcm.focal))]
-        y1 <- data.sort[c(1, which(scenario[,1]==gcm.focal)), which(units.sort==unit)]
+        x1 <- x[c(1, which(period[,1]==gcm.focal))]
+        y1 <- data.sort[c(1, which(period[,1]==gcm.focal)), which(units.sort==unit)]
         y1[is.na(y1)] <- 0
         if(length(unique(sign(diff(x1))))==1){
           x3 <- if(unique(sign(diff(x1)))==-1) rev(x1) else x1
@@ -882,8 +883,8 @@ server <- function(input, output, session) {
       if(unit.focal!="none"){
         for(gcm in gcms){
           i=which(gcms==gcm)
-          x2 <- x[c(1, which(scenario[,1]==gcm))]
-          y2 <- data[c(1, which(scenario[,1]==gcm)), which(units==unit.focal)]
+          x2 <- x[c(1, which(period[,1]==gcm))]
+          y2 <- data[c(1, which(period[,1]==gcm)), which(units==unit.focal)]
           if(length(unique(sign(diff(x2))))==1){
             x3 <- if(unique(sign(diff(x2)))==-1) rev(x2) else x2
             y3 <- if(unique(sign(diff(x2)))==-1) rev(y2) else y2
@@ -930,10 +931,10 @@ server <- function(input, output, session) {
         axis(1, at=pretty(x), labels=pretty(x), tck=0)
         axis(2, at=pretty(ylim), labels=pretty(ylim)/1000, tck=0, las=2)
         
-        lines(rep(x[which(scenario[,1]==gcm.focal & scenario[,3]==proj.year)], 2), ylim, col="gray90", lwd=2)
+        lines(rep(x[which(period[,1]==gcm.focal & period[,3]==proj.year)], 2), ylim, col="gray90", lwd=2)
         
-        increasing <- data[which(scenario$GCM==gcm.focal & scenario$proj.year==2085),]>data[1,]
-        order.increasing <- rev(order(data[which(scenario$GCM==gcm.focal & scenario$proj.year==2085),increasing==T]))
+        increasing <- data[which(period$GCM==gcm.focal & period$proj.year==2081),]>data[1,]
+        order.increasing <- rev(order(data[which(period$GCM==gcm.focal & period$proj.year==2081),increasing==T]))
         order.decreasing <- rev(order(data[1,increasing==F]))
         spps.increasing <- spps[increasing==T][order.increasing]
         spps.decreasing <- spps[increasing==F][order.decreasing]
@@ -946,8 +947,8 @@ server <- function(input, output, session) {
           i <- which(spps.sort==spp)
           col.focal <- if(spp.focal=="none") sppcolors[i] else "lightgray"  
           col.focal2 <- if(spp.focal=="none") "black" else "darkgray"  
-          x1 <- x[c(1, which(scenario[,1]==gcm.focal))]
-          y1 <- data.sort[c(1, which(scenario[,1]==gcm.focal)), which(spps.sort==spp)]
+          x1 <- x[c(1, which(period[,1]==gcm.focal))]
+          y1 <- data.sort[c(1, which(period[,1]==gcm.focal)), which(spps.sort==spp)]
           y1[is.na(y1)] <- 0
           if(length(unique(sign(diff(x1))))==1){
             x3 <- if(unique(sign(diff(x1)))==-1) rev(x1) else x1
@@ -978,8 +979,8 @@ server <- function(input, output, session) {
         if(spp.focal!="none"){
           for(gcm in gcms){
             i=which(gcms==gcm)
-            x2 <- x[c(1, which(scenario[,1]==gcm))]
-            y2 <- data[c(1, which(scenario[,1]==gcm)), which(spps==spp.focal)]
+            x2 <- x[c(1, which(period[,1]==gcm))]
+            y2 <- data[c(1, which(period[,1]==gcm)), which(spps==spp.focal)]
             if(length(unique(sign(diff(x2))))==1){
               x3 <- if(unique(sign(diff(x2)))==-1) rev(x2) else x2
               y3 <- if(unique(sign(diff(x2)))==-1) rev(y2) else y2
@@ -1028,8 +1029,8 @@ server <- function(input, output, session) {
           i <- which(spps==spp)
           col.focal <- if(spp.focal=="none") sppcolors[i] else "lightgray"  
           col.focal2 <- if(spp.focal=="none") "black" else "darkgray"  
-          x <- persistence[which(scenario[,3]==proj.year), i]
-          y <- expansion[which(scenario[,3]==proj.year), i]
+          x <- persistence[which(period[,3]==proj.year), i]
+          y <- expansion[which(period[,3]==proj.year), i]
           y[y<2^(ylim[1])] <- 2^(ylim[1])
           y <- log2(y)
           
@@ -1044,8 +1045,8 @@ server <- function(input, output, session) {
         if(spp.focal!="none"){
           for(gcm in gcms){
             i=which(gcms==gcm)
-            x2 <- persistence[c(1, which(scenario[,1]==gcm)), which(spps==spp.focal)]
-            y2 <- expansion[c(1, which(scenario[,1]==gcm)), which(spps==spp.focal)]
+            x2 <- persistence[c(1, which(period[,1]==gcm)), which(spps==spp.focal)]
+            y2 <- expansion[c(1, which(period[,1]==gcm)), which(spps==spp.focal)]
             y2[y2<2^(ylim[1])] <- 2^(ylim[1])
             y2 <- log2(y2)
             # if(all(diff(x2) > 0)){
@@ -1105,7 +1106,9 @@ server <- function(input, output, session) {
     DT::datatable(modelMetadata, 
                   options = list(pageLength = dim(modelMetadata)[1]), 
                   rownames= FALSE, 
-                  caption = 'Model Metadata. Global model statistics are quoted from Forster et al. (2013, Journal of Geophysical Research): TCR is transient climate response (temperature change in response to a 1%/yr increase in CO2 at time, at point of doubling CO2), ECS is equilibrium climate sensitivity (temperature change in response to an instant doubling of CO2), and deltaT is global mean surface temperature change since preindustrial for SSP2-4.5 in the 2090s. All values are in degrees Celsius.'
+                  caption = HTML("<p><h4>Global climate models featured in this app; see the <a href='https://bcgov-env.shinyapps.io/cmip6-BC/' target='_blank'>cmip-BC app</a> for more info. 
+                                 ECS is equilibrium climate sensitivity (long-term temperature change in response to an instant doubling of CO2), and values are quoted from <a href='https://advances.sciencemag.org/content/6/26/eaba1981.abstract' target='_blank'>Meehl et al. (2020)</a>. 
+                                 The last two columns are the number of model runs for each scenario that are included in ClimateBC</p></h4>")
     )
   })
   
