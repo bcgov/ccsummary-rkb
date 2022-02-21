@@ -90,15 +90,20 @@ ColScheme.gcms <- c(brewer.pal(n=length(gcms), "Paired"))
 
 bgc.names <- read.csv(paste("data/All_BGCs_v11_21.csv", sep="."), stringsAsFactors = F)
 
+bgcs.native <- as.vector(unlist(read.csv(paste("data/bgcs.native", studyarea, "csv", sep="."))))
+zones.native <- as.vector(unlist(read.csv(paste("data/zones.native", studyarea, "csv", sep="."))))
+
 ## projected area of biogeoclimatic units
 bgc.area <- read.csv(paste("data/PredSum.BGC", studyarea, "csv", sep="."))
 temp <- bgc.area[-which(bgc.area$GCM=="ensemble"),] #remove ensemble vote
 temp.ens <- bgc.area[which(bgc.area$GCM=="ensemble"),] #ensemble vote
 bgc.area <- rbind(temp, temp.ens)
 bgc.area <- bgc.area[,-c(1:3)] # matches the "period" table
-names(bgc.area) <- substring(names(bgc.area), 6)
 bgc.area[is.na(bgc.area)] <- 0
 bgcs.all <- names(bgc.area)
+r <- raster(paste("data/BGC.pred", studyarea, "ref.tif", sep="."))
+cellarea <- (res(r)[2]*111)*(res(r)[1]*111*cos(mean(extent(r)[3:4])))
+bgc.area <- bgc.area*cellarea
 
 #BGC subzone color scheme
 bgccolors <- read.csv("data/WNAv11_Subzone_Colours.csv", stringsAsFactors = F)
@@ -149,6 +154,55 @@ for(gcm in gcms){
 }
 levels.bgc <- read.csv("data/levels.bgc.csv")[,1]
 
+## persistence and expansion of bgc units
+
+    #bgc total table
+    bgc.count <- read.csv(paste("data/PredSum.BGC", studyarea, "csv", sep="."))
+    bgc.count[is.na(bgc.count)] <- 0
+    temp <- bgc.count[-which(bgc.count$GCM=="ensemble"),] #remove ensemble vote
+    temp.ens <- bgc.count[which(bgc.count$GCM=="ensemble"),] #ensemble vote
+    bgc.count <- rbind(temp, temp.ens)
+    bgc.count <- bgc.count[,-c(1:3)] # matches the "period" table
+
+    #zone total table
+    zone.count <- read.csv(paste("data/PredSum.zone", studyarea, "csv", sep="."))
+    zone.count[is.na(zone.count)] <- 0
+    temp <- zone.count[-which(zone.count$GCM=="ensemble"),] #remove ensemble vote
+    temp.ens <- zone.count[which(zone.count$GCM=="ensemble"),] #ensemble vote
+    zone.count <- rbind(temp, temp.ens)
+    zone.count <- zone.count[,-c(1:3)] # matches the "period" table
+
+    #bgc table for home range
+    bgc.count.home <- read.csv(paste("data/PredSum.BGC.home", studyarea, "csv", sep="."))
+    bgc.count.home[is.na(bgc.count.home)] <- 0
+    temp <- bgc.count.home[-which(bgc.count.home$GCM=="ensemble"),] #remove ensemble vote
+    temp.ens <- bgc.count.home[which(bgc.count.home$GCM=="ensemble"),] #ensemble vote
+    bgc.count.home <- rbind(temp, temp.ens)
+    bgc.count.home <- bgc.count.home[,-c(1:3)] # matches the "period" table
+
+    #zone table for home range
+    zone.count.home <- read.csv(paste("data/PredSum.zone.home", studyarea, "csv", sep="."))
+    zone.count.home[is.na(zone.count.home)] <- 0
+    temp <- zone.count.home[-which(zone.count.home$GCM=="ensemble"),] #remove ensemble vote
+    temp.ens <- zone.count.home[which(zone.count.home$GCM=="ensemble"),] #ensemble vote
+    zone.count.home <- rbind(temp, temp.ens)
+    zone.count.home <- zone.count.home[,-c(1:3)] # matches the "period" table
+
+    ## calculate persistence and expansion tables
+    bgc.persistence <- sweep(bgc.count.home, MARGIN=2,unlist(bgc.count[1,]), '/' )
+    zone.persistence <- sweep(zone.count.home, MARGIN=2,unlist(zone.count[1,match(names(zone.count.home), names(zone.count))]), '/' )
+    bgc.expansion <- sweep(bgc.count-bgc.count.home, MARGIN=2,unlist(bgc.count[1,]), '/' )
+    zone.expansion <- sweep(zone.count[,match(names(zone.count.home), names(zone.count))]-zone.count.home, MARGIN=2,unlist(zone.count[1,match(names(zone.count.home), names(zone.count))]), '/' )
+
+    ## simplify and structure the persistence and expansion tables
+    totalarea <- sum(bgc.count[1,], na.rm = T) #historical distribution
+    small <- which(bgc.count[1,]/totalarea < 0.01) # establish insignificant species for removal
+    small <- c(small, which(is.na(bgc.count[1,]))) # establish insignificant species for removal
+    bgc.persistence <- bgc.persistence[,-small] #remove small units and assign to permanent table
+    bgc.expansion <- bgc.expansion[,-small] #remove small units and assign to permanent table
+
+
+    
 # ## SPECIES FEASIBILITIES
 # SiteLookup <- read.csv("data/SiteLookup.csv", stringsAsFactors = F)
 # SuitLookup <- read.csv("data/SuitLookup.csv", stringsAsFactors = F)
@@ -334,23 +388,58 @@ ui <- fluidPage(
                                         
                                         checkboxInput("zonelevel", label = "Generalize to BGC zone level", value = T),
                                         
+                                        radioButtons("plotbgc", inline = TRUE,
+                                                     label = "Choose a plot type",
+                                                     choices = list("Area" = 1, "Persistence" = 2),
+                                                     selected = 1),
+                                        
                                         conditionalPanel(
-                                          condition = "input.zonelevel == true",
+                                          condition = "input.plotbgc == 1",
                                           
-                                          radioButtons("zone.focal", inline = TRUE, 
-                                                       label = "Select BGC zone for ensemble detail",
-                                                       choices = as.list(c("none", zones)),
-                                                       selected = "none"),
+                                          conditionalPanel(
+                                            condition = "input.zonelevel == true",
+                                            
+                                            radioButtons("zone.area.focal", inline = TRUE, 
+                                                         label = "Select BGC zone for ensemble detail",
+                                                         choices = as.list(c("none", zones)),
+                                                         selected = "none"),
+                                            
+                                          ),
+                                          
+                                          conditionalPanel(
+                                            condition = "input.zonelevel == false",
+                                            
+                                            selectInput("bgc.area.focal", 
+                                                        label = "Select BGC subzone-variant for ensemble detail",
+                                                        choices = as.list(c("none", bgcs)),
+                                                        selected = "none"),
+                                            
+                                          ),
                                           
                                         ),
                                         
                                         conditionalPanel(
-                                          condition = "input.zonelevel == false",
+                                          condition = "input.plotbgc == 2",
                                           
-                                          selectInput("bgc.focal", 
-                                                      label = "Select BGC subzone-variant for ensemble detail",
-                                                      choices = as.list(c("none", bgcs)),
-                                                      selected = "none"),
+                                          conditionalPanel(
+                                            condition = "input.zonelevel == true",
+                                            
+                                            radioButtons("zone.persistence.focal", inline = TRUE, 
+                                                         label = "Select BGC zone for ensemble detail",
+                                                         choices = as.list(c("none", zones.native)),
+                                                         selected = "none"),
+                                            
+                                          ),
+                                          
+                                          conditionalPanel(
+                                            condition = "input.zonelevel == false",
+                                            
+                                            selectInput("bgc.persistence.focal", 
+                                                        label = "Select BGC subzone-variant for ensemble detail",
+                                                        choices = as.list(c("none", bgcs.native)),
+                                                        selected = "none"),
+                                            
+                                          ),
                                           
                                         ),
                                         
@@ -735,8 +824,9 @@ server <- function(input, output, session) {
     # var2 <- "MAP"
     # ratioscale <- T
     # zonelevel=T
-    # unit.focal <- if(zonelevel==T) zones[1] else bgcs[1]
-    # units <- if(zonelevel==T) zones else bgcs
+    # unit.area.focal <- if(zonelevel==T) zones[1] else bgcs[1]
+    # unit.persistence.focal <- if(zonelevel==T) zones.native[1] else bgcs.native[1]
+    # units.area <- if(zonelevel==T) zones else bgcs
     # fractional=F
     # edatope <- edatopes[1]
     # spp.focal <- "Fd"
@@ -748,8 +838,9 @@ server <- function(input, output, session) {
     var1 <- input$var1
     var2 <- input$var2
     zonelevel <- if(input$zonelevel==T) T else F
-    unit.focal <- if(zonelevel==T) input$zone.focal else input$bgc.focal
-    units <- if(zonelevel==T) zones else bgcs
+    unit.area.focal <- if(zonelevel==T) input$zone.area.focal else input$bgc.area.focal
+    unit.persistence.focal <- if(zonelevel==T) input$zone.persistence.focal else input$bgc.persistence.focal
+    units.area <- if(zonelevel==T) zones else bgcs
     # fractional <- if(input$fractional==T) T else F
     # edatope <- input$edatope
     recent <- input$recent
@@ -810,94 +901,164 @@ server <- function(input, output, session) {
       
     } else if(input$type==2){ 
       
-      #-------------------------
-      # BGC scatterplot
-      #-------------------------
-      
-      data <- if(zonelevel==T) zone.area else bgc.area
-      clim.data <- clim.meanChange
-      ColScheme <- if(zonelevel==T) zonecolors else bgccolors
-      units <- if(zonelevel==T) zones else bgcs
-      
-      x <- clim.data[, which(variables==var1)]
-      variable.type1 <- variable.types[which(variables==var1)]
-      
-      xlim=range(x)*c(if(min(x)<0) 1.1 else 0.9, if(max(x)>0) 1.1 else 0.9)-c(diff(range(x))/4, 0)
-      ylim=c(0, max(data, na.rm=T)*1.05)
-      
-      par(mar=c(3,4,0,1), mgp=c(1.25, 0.25,0), cex=1.5)
-      plot(0,col="white", tck=0, xaxt="n", yaxt="n", xaxs="i", yaxs="i", xlim=xlim, ylim=ylim, ylab="",
-           xlab=paste("Change in", variable.names$Variable[which(variable.names$Code==var1)]), 
-      )
-      par(mgp=c(2.5,0.25, 0))
-      title(ylab=paste("Area of biogeoclimatic unit ('000 sq.km)"))
-      
-      axis(1, at=pretty(x), labels=pretty(x), tck=0)
-      axis(2, at=pretty(ylim), labels=pretty(ylim)/1000, tck=0, las=2)
-      
-      lines(rep(x[which(period[,1]==gcm.focal & period[,3]==proj.year)], 2), ylim, col="gray90", lwd=2)
-      
-      increasing <- data[which(period$GCM==gcm.focal & period$proj.year==2081),]>data[1,]
-      order.increasing <- rev(order(data[which(period$GCM==gcm.focal & period$proj.year==2081),increasing==T]))
-      order.decreasing <- rev(order(data[1,increasing==F]))
-      units.increasing <- units[increasing==T][order.increasing]
-      units.decreasing <- units[increasing==F][order.decreasing]
-      data.increasing <-  if(length(which(increasing==T))>1) data[,increasing==T][,order.increasing] else data[,increasing==T]
-      data.decreasing <- if(length(which(increasing==F))>1) data[,increasing==F][,order.decreasing] else data[,increasing==F]
-      units.sort <- c(units.increasing, units.decreasing)
-      data.sort <- cbind(data.increasing, data.decreasing)
-      increasing.sort <- increasing[match(units.sort, units)]
-      for(unit in units.sort){
-        i <- which(units.sort==unit)
-        col.focal <- if(unit.focal=="none") ColScheme$colour[which(ColScheme$classification==unit)] else "lightgray"
-        col.focal2 <- if(unit.focal=="none") "black" else "darkgray"
-        x1 <- x[c(1, which(period[,1]==gcm.focal))]
-        y1 <- data.sort[c(1, which(period[,1]==gcm.focal)), which(units.sort==unit)]
-        y1[is.na(y1)] <- 0
-        if(length(unique(sign(diff(x1))))==1){
-          x3 <- if(unique(sign(diff(x1)))==-1) rev(x1) else x1
-          y3 <- if(unique(sign(diff(x1)))==-1) rev(y1) else y1
-          s <- stinterp(x3,y3, seq(min(x3),max(x3), diff(xlim)/500)) # way better than interpSpline, not prone to oscillations
-          lines(s, col=col.focal, lwd=2)
-        } else lines(x1, y1, col=col.focal, lwd=3)
+      if(input$plotbgc==1){
+        #-------------------------
+        # BGC scatterplot
+        #-------------------------
         
-        # labels
-        position <- rep(0:2, times=100)
-        side <- if(increasing.sort[i]==T) 4 else 2
-        space <- 12
-        lines(if(increasing.sort[i]==T) c(x1[length(x1)], x1[length(x1)]+position[i]*diff(range(x))/space) else c(x1[1], x1[1]-position[i]*diff(range(x))/space),
-              if(increasing.sort[i]==T) rep(y1[length(y1)],2) else rep(y1[1],2), col=col.focal, lty=2)
-        text(if(increasing.sort[i]==T) x1[length(x1)]+position[i]*diff(range(x))/space else x1[1]-position[i]*diff(range(x))/space,
-             if(increasing.sort[i]==T) y1[length(y1)] else y1[1],
-             unit, col=col.focal, pos=side, font=2, cex=0.7, offset=0.1)
         
-        if(recent==T){
-          x1 <- x[1:2]
-          y1 <- data.sort[1:2, which(units.sort==unit)]
-          lines(x1, y1, col=col.focal, lwd=1.25, lty=1)
-          points(x1[2],y1[2], pch=21, bg=col.focal, col=col.focal2, cex=1.2)
-        }
+        data <- if(zonelevel==T) zone.area else bgc.area
+        clim.data <- clim.meanChange
+        ColScheme <- if(zonelevel==T) zonecolors else bgccolors
+        units <- if(zonelevel==T) zones else bgcs
         
-      }
-      
-      if(unit.focal!="none"){
-        for(gcm in gcms){
-          i=which(gcms==gcm)
-          x2 <- x[c(1, which(period[,1]==gcm))]
-          y2 <- data[c(1, which(period[,1]==gcm)), which(units==unit.focal)]
-          if(length(unique(sign(diff(x2))))==1){
-            x3 <- if(unique(sign(diff(x2)))==-1) rev(x2) else x2
-            y3 <- if(unique(sign(diff(x2)))==-1) rev(y2) else y2
+        x <- clim.data[, which(variables==var1)]
+        variable.type1 <- variable.types[which(variables==var1)]
+        
+        xlim=range(x)*c(if(min(x)<0) 1.1 else 0.9, if(max(x)>0) 1.1 else 0.9)-c(diff(range(x))/4, 0)
+        ylim=c(0, max(data, na.rm=T)*1.05)
+        
+        par(mar=c(3,4,0,1), mgp=c(1.25, 0.25,0), cex=1.5)
+        plot(0,col="white", tck=0, xaxt="n", yaxt="n", xaxs="i", yaxs="i", xlim=xlim, ylim=ylim, ylab="",
+             xlab=paste("Change in", variable.names$Variable[which(variable.names$Code==var1)]), 
+        )
+        par(mgp=c(2.5,0.25, 0))
+        title(ylab=paste("Area of biogeoclimatic unit ('000 sq.km)"))
+        
+        axis(1, at=pretty(x), labels=pretty(x), tck=0)
+        axis(2, at=pretty(ylim), labels=pretty(ylim)/1000, tck=0, las=2)
+        
+        lines(rep(x[which(period[,1]==gcm.focal & period[,3]==proj.year)], 2), ylim, col="gray90", lwd=2)
+        
+        increasing <- data[which(period$GCM==gcm.focal & period$proj.year==2081),]>data[1,]
+        order.increasing <- rev(order(data[which(period$GCM==gcm.focal & period$proj.year==2081),increasing==T]))
+        order.decreasing <- rev(order(data[1,increasing==F]))
+        units.increasing <- units.area[increasing==T][order.increasing]
+        units.decreasing <- units.area[increasing==F][order.decreasing]
+        data.increasing <-  if(length(which(increasing==T))>1) data[,increasing==T][,order.increasing] else data[,increasing==T]
+        data.decreasing <- if(length(which(increasing==F))>1) data[,increasing==F][,order.decreasing] else data[,increasing==F]
+        units.sort <- c(units.increasing, units.decreasing)
+        data.sort <- cbind(data.increasing, data.decreasing)
+        increasing.sort <- increasing[match(units.sort, units)]
+        for(unit in units.sort){
+          i <- which(units.sort==unit)
+          col.focal <- if(unit.area.focal=="none") ColScheme$colour[which(ColScheme$classification==unit)] else "lightgray"
+          col.focal2 <- if(unit.area.focal=="none") "black" else "darkgray"
+          x1 <- x[c(1, which(period[,1]==gcm.focal))]
+          y1 <- data.sort[c(1, which(period[,1]==gcm.focal)), which(units.sort==unit)]
+          y1[is.na(y1)] <- 0
+          if(length(unique(sign(diff(x1))))==1){
+            x3 <- if(unique(sign(diff(x1)))==-1) rev(x1) else x1
+            y3 <- if(unique(sign(diff(x1)))==-1) rev(y1) else y1
             s <- stinterp(x3,y3, seq(min(x3),max(x3), diff(xlim)/500)) # way better than interpSpline, not prone to oscillations
-            lines(s, col=ColScheme.gcms[i], lwd=if(gcm==gcm.focal) 4 else 2)
-          } else lines(x2, y2, col=ColScheme.gcms[i], lwd=if(gcm==gcm.focal) 4 else 2)
-          j=which(proj.years==proj.year)-1
-          points(x2,y2, pch=21, bg=ColScheme.gcms[i], cex=1)
-          points(x2[j],y2[j], pch=21, bg=ColScheme.gcms[i], cex=if(gcm==gcm.focal) 3.5 else 3)
-          text(x2[j],y2[j], mods[i], cex=if(gcm==gcm.focal) 0.7 else 0.5, font=2)
+            lines(s, col=col.focal, lwd=2)
+          } else lines(x1, y1, col=col.focal, lwd=3)
+          
+          # labels
+          position <- rep(0:2, times=100)
+          side <- if(increasing.sort[i]==T) 4 else 2
+          space <- 12
+          lines(if(increasing.sort[i]==T) c(x1[length(x1)], x1[length(x1)]+position[i]*diff(range(x))/space) else c(x1[1], x1[1]-position[i]*diff(range(x))/space),
+                if(increasing.sort[i]==T) rep(y1[length(y1)],2) else rep(y1[1],2), col=col.focal, lty=2)
+          text(if(increasing.sort[i]==T) x1[length(x1)]+position[i]*diff(range(x))/space else x1[1]-position[i]*diff(range(x))/space,
+               if(increasing.sort[i]==T) y1[length(y1)] else y1[1],
+               unit, col=col.focal, pos=side, font=2, cex=0.7, offset=0.1)
+          
+          if(recent==T){
+            x1 <- x[1:2]
+            y1 <- data.sort[1:2, which(units.sort==unit)]
+            lines(x1, y1, col=col.focal, lwd=1.25, lty=1)
+            points(x1[2],y1[2], pch=21, bg=col.focal, col=col.focal2, cex=1.2)
+          }
+          
         }
+        
+        if(unit.area.focal!="none"){
+          for(gcm in gcms){
+            i=which(gcms==gcm)
+            x2 <- x[c(1, which(period[,1]==gcm))]
+            y2 <- data[c(1, which(period[,1]==gcm)), which(units==unit.area.focal)]
+            if(length(unique(sign(diff(x2))))==1){
+              x3 <- if(unique(sign(diff(x2)))==-1) rev(x2) else x2
+              y3 <- if(unique(sign(diff(x2)))==-1) rev(y2) else y2
+              s <- stinterp(x3,y3, seq(min(x3),max(x3), diff(xlim)/500)) # way better than interpSpline, not prone to oscillations
+              lines(s, col=ColScheme.gcms[i], lwd=if(gcm==gcm.focal) 4 else 2)
+            } else lines(x2, y2, col=ColScheme.gcms[i], lwd=if(gcm==gcm.focal) 4 else 2)
+            j=which(proj.years==proj.year)-1
+            points(x2,y2, pch=21, bg=ColScheme.gcms[i], cex=1)
+            points(x2[j],y2[j], pch=21, bg=ColScheme.gcms[i], cex=if(gcm==gcm.focal) 3.5 else 3)
+            text(x2[j],y2[j], mods[i], cex=if(gcm==gcm.focal) 0.7 else 0.5, font=2)
+          }
+        }
+        
+      } else if(input$plotbgc==2){
+        
+        #-------------------------
+        # bgc bubbleplot
+        #-------------------------
+        
+        persistence <- if(zonelevel==T) zone.persistence else bgc.persistence
+        expansion <- if(zonelevel==T) zone.expansion else bgc.expansion
+        ColScheme <- if(zonelevel==T) zonecolors else bgccolors
+        # units <- names(persistence)
+        units.native <- if(zonelevel==T) zones.native else bgcs.native
+        units <- units.native
+        
+        par(mar=c(3,4,0.1,0.1), mgp=c(1.25, 0.25, 0), cex=1.5) 
+        
+        xlim <- c(0, 1.5)
+        ylim <- c(-5,3)
+        plot(0, xlim=xlim, ylim=ylim, col="white", xaxt="n", yaxt="n", xlab="Persistence within historically feasible range", ylab="")
+        axis(1,at=seq(xlim[1], xlim[2], 0.2), labels=paste(seq(xlim[1], xlim[2], 0.2)*100,"%", sep=""), tck=0)
+        axis(2,at=seq(ylim[1], ylim[2]), labels=paste(round(2^(seq(ylim[1], ylim[2]))*100),"%", sep=""), las=2, tck=0)
+        par(mgp=c(2.75, 0.25, 0))
+        title(ylab="Expansion beyond historically feasible range", cex.lab=1)
+        iso <- seq(0,1.2, 0.001)
+        lines(1-iso, log2(iso), lty=2, lwd=2, col="darkgray")
+        # arctext(x = "Growing feasible range", center = c(-1, -28.7), radius = 4.6, start = 0.431*pi , cex = 0.8, stretch = 1.05, col="darkgray", font=2)
+        # arctext(x = "Shrinking feasible range", center = c(-1, -29.3), radius = 4.6, start = 0.431*pi , cex = 0.8, stretch = 1.05, col="darkgray", font=2)
+        # mtext(paste(edatope.name[which(edatopes==edatope)], " sites", " (", edatope, ")", sep=""), side=3, line=-1.25, adj= if(edatope=="C4") 0.025 else 0.075, cex=0.7, font=1)
+        
+        unit=units[2]
+        for(unit in units){
+          col.focal <- if(unit.persistence.focal=="none") ColScheme$colour[which(ColScheme$classification==unit)] else "lightgray"
+          col.focal2 <- if(unit.persistence.focal=="none") "black" else "darkgray"
+          x <- persistence[which(period[,3]==proj.year), which(names(persistence)==unit)]
+          y <- expansion[which(period[,3]==proj.year), which(names(persistence)==unit)]
+          y[y<2^(ylim[1])] <- 2^(ylim[1])
+          y <- log2(y)
+          
+          # points(x,y)
+          if(length(x)>1){
+            if(var(y)==0) lines(range(x, na.rm=T), range(y), col=col.focal) else dataEllipse(x, y, levels=0.5, center.pch=21, add=T, col=col.focal, fill=T, lwd=0.5, plot.points=F)
+          }
+          points(mean(x),mean(y), pch=21, bg=col.focal, cex=if(unit==unit.persistence.focal) 4.5 else 3, col=col.focal2)
+          text(mean(x),mean(y), unit, cex=if(unit==unit.persistence.focal) 1 else 0.7, font=2, col=col.focal2)
+        }
+        
+        if(unit.persistence.focal!="none"){
+          for(gcm in gcms){
+            i=which(gcms==gcm)
+            x2 <- persistence[c(1, which(period[,1]==gcm)), which(names(persistence)==unit.persistence.focal)]
+            y2 <- expansion[c(1, which(period[,1]==gcm)), which(names(expansion)==unit.persistence.focal)]
+            y2[y2<2^(ylim[1])] <- 2^(ylim[1])
+            y2 <- log2(y2)
+            # if(all(diff(x2) > 0)){
+            if(length(unique(sign(diff(x2))))==1 & sum(diff(x2))!=0){
+              x3 <- if(unique(sign(diff(x2)))==-1) rev(x2) else x2
+              y3 <- if(unique(sign(diff(x2)))==-1) rev(y2) else y2
+              s <- stinterp(x3,y3, seq(min(x3),max(x3), diff(xlim)/500)) # way better than interpSpline, not prone to oscillations
+              lines(s, col=ColScheme.gcms[i], lwd=2)
+            } else lines(x2, y2, col=ColScheme.gcms[i], lwd=2)
+            j=which(proj.years==proj.year)
+            points(x2,y2, pch=21, bg=ColScheme.gcms[i], cex=1)
+            points(x2[j],y2[j], pch=21, bg=ColScheme.gcms[i], cex=if(gcm==gcm.focal) 3.5 else 3)
+            text(x2[j],y2[j], mods[i], cex=if(gcm==gcm.focal) 0.7 else 0.5, font=2)
+          }
+        }
+        
+        
       }
-      
     } else if(input$type==3){ 
       
       if(input$plotspp==1){
