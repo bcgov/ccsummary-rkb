@@ -39,11 +39,7 @@ edatope.names <- c("Poor-subxeric", "Medium-mesic", "Rich-hygric")
 scenarios <- c("ssp126", "ssp245", "ssp370")
 scenario.names=c("SSP1-2.6", "SSP2-4.5", "SSP3-7.0")
 
-proj.years <- c(2001, 2021, 2041, 2061, 2081)
 proj.year.names=c("2001-2020", "2021-2040", "2041-2060", "2061-2080", "2081-2100")
-
-hist.years <- c(2001, 2011)
-hist.year.names <- c("2001-2020", "2011-2020")
 
 bdy <- readOGR(dsn = paste("bdy/bdy", studyarea, "shp", sep="."))
 P4S.epsg <- CRS ("+init=epsg:4326") # web mercator
@@ -343,7 +339,8 @@ ui <- fluidPage(
                         
                         column(5, 
                                
-                               leafletOutput(outputId = "map", height="86vh")
+                               leafletOutput(outputId = "map", height="86vh"),
+                               downloadButton(outputId = "downloadMap", label = "Download map")
                                
                         ),
                         
@@ -535,7 +532,8 @@ ui <- fluidPage(
                                ),
                                
                                column(12, 
-                                      plotOutput(outputId = "scatterPlot", height="auto")
+                                      plotOutput(outputId = "scatterPlot", height="auto"),
+                                      downloadButton(outputId = "downloadPlot", label = "Download plot")
                                ),
                         )
                       ),
@@ -815,8 +813,65 @@ server <- function(input, output, session) {
       addPopups(click$lng, click$lat, text)
   })
   
+  # Map download
+  output$downloadMap <- downloadHandler(
+    filename =  function(){
+      paste(studyarea, 
+            "map",
+            if(input$zonelevel==T) "zones" else "bgcs", 
+            if(input$maptype==1) "ref" else if(input$maptype==2) "obs" else paste("proj",input$gcm.focal,proj.years[as.numeric(input$proj.year)+1],sep="."),
+            "png", sep=".")
+    },
+    
+    content = function(file) {
+      
+      zonelevel <- if(input$zonelevel==T) T else F
+      gcm.focal <- input$gcm.focal
+      scenario <- "ssp245"
+      proj.year <-  proj.years[as.numeric(input$proj.year)+1]
+      transparency <- input$transparency
+      
+      if(input$maptype==1) X <- bgc.pred.ref
+      if(input$maptype==2) X <- bgc.pred.2001
+      if(input$maptype==3) X <- get(paste("bgc.pred", gcm.focal, scenario, proj.year, sep="."))
+      BGC.pred <- levels.bgc[values(X)]
+      
+      zone.pred <- rep(NA, length(BGC.pred))
+      for(i in zones.all){ zone.pred[grep(i,BGC.pred)] <- i }
+      
+      ColScheme <- if(zonelevel==T) zonecolors$colour[match(zones.all, zonecolors$classification)] else bgccolors$colour[match(bgcs.all, bgccolors$classification)]
+      units <- if(zonelevel==T) zones.all else bgcs.all
+      pred <- if(zonelevel==T) zone.pred else BGC.pred
+      
+      values(X) <- factor(pred, levels=units)
+      values(X)[1:length(units)] <- 1:length(units) # this is a patch that is necessary to get the color scheme right.
+      
+      png(file, width = 7*300, height = 7.5*300, res = 300)
+      par(mar=c(0,0,0,0))
+      
+      plot(X, xaxt="n", yaxt="n", col=alpha(ColScheme, 1), legend=FALSE, legend.mar=0, maxpixels=ncell(X), bty="n", box=FALSE) 
+      values(X)[-(1:length(units))] <- NA # cover up the color bar
+      image(X, add=T, col="white") # cover up the color bar
+      plot(bdy, add=T, lwd=1)  
+      
+      temp <- table(pred)
+      temp <- rev(sort(temp))
+      legendunits <- names(temp)
+      legendunits <- legendunits[which(temp > (totalarea*0.005))]
+      
+      if(zonelevel==T) legend("topright", legend=legendunits, fill=zonecolors$colour[match(legendunits, zonecolors$classification)], ncol= if(length(legendunits)>10) 2 else 1, bty="n", cex=1.4)
+      
+      # box()
+      dev.off()
+    }
+  )
   
-  output$scatterPlot <- renderPlot({
+  
+  
+  
+  
+  ## Plot window (done as a function so that the user can export)
+  scatterPlot <- function() {
     
     # proj.year <- 2041
     # scenario <- "ssp245"
@@ -877,7 +932,7 @@ server <- function(input, output, session) {
         x1 <- data[2, which(variables==var1)]
         y1 <- data[2, which(variables==var2)]
         points(x1,y1, pch=16, col="gray", cex=2.5)
-        text(x1,y1, "2001-2020", cex=1.15, font=2, pos=4, col="gray", offset=0.9)  
+        text(x1,y1, "2001-2020 (observed)", cex=1, font=2, pos=4, col="gray", offset=0.9)  
       }
       
       for(gcm in gcms){
@@ -890,7 +945,7 @@ server <- function(input, output, session) {
           s <- stinterp(x3,y3, seq(min(x3),max(x3), diff(xlim)/500)) # way better than interpSpline, not prone to oscillations
           lines(s, col=ColScheme.gcms[i], lwd=2)
         } else lines(x2, y2, col=ColScheme.gcms[i], lwd=2)
-        j=which(proj.years==proj.year)-1
+        j=which(proj.years==proj.year)
         points(x2,y2, pch=21, bg=ColScheme.gcms[i], cex=1)
         points(x2[j],y2[j], pch=21, bg=ColScheme.gcms[i], cex=if(gcm==gcm.focal) 3.5 else 3)
         text(x2[j],y2[j], mods[i], cex=if(gcm==gcm.focal) 0.7 else 0.5, font=2)
@@ -984,12 +1039,22 @@ server <- function(input, output, session) {
               s <- stinterp(x3,y3, seq(min(x3),max(x3), diff(xlim)/500)) # way better than interpSpline, not prone to oscillations
               lines(s, col=ColScheme.gcms[i], lwd=if(gcm==gcm.focal) 4 else 2)
             } else lines(x2, y2, col=ColScheme.gcms[i], lwd=if(gcm==gcm.focal) 4 else 2)
-            j=which(proj.years==proj.year)-1
+            j=which(proj.years==proj.year)
             points(x2,y2, pch=21, bg=ColScheme.gcms[i], cex=1)
             points(x2[j],y2[j], pch=21, bg=ColScheme.gcms[i], cex=if(gcm==gcm.focal) 3.5 else 3)
             text(x2[j],y2[j], mods[i], cex=if(gcm==gcm.focal) 0.7 else 0.5, font=2)
           }
+
+          if(recent==T){
+            x1 <- x[1:2]
+            y1 <- data.sort[1:2, which(units.sort==unit.area.focal)]
+            lines(x1, y1, col="gray", lwd=1.25, lty=1)
+            points(x1[2],y1[2], pch=21, bg="gray", col=1, cex=2)
+            text(x1[2],y1[2], "2001-2020 (observed)", cex=1, font=2, pos=4, col="gray30", offset=0.7)  
+          }
+          
         }
+        box()
         
       } else if(input$plotbgc==2){
         
@@ -1006,7 +1071,7 @@ server <- function(input, output, session) {
         
         par(mar=c(3,4,0.1,0.1), mgp=c(1.25, 0.25, 0), cex=1.5) 
         
-        xlim <- c(0, 1.5)
+        xlim <- c(0, 1.1)
         ylim <- c(-5,3)
         plot(0, xlim=xlim, ylim=ylim, col="white", xaxt="n", yaxt="n", xlab="Persistence within historically feasible range", ylab="")
         axis(1,at=seq(xlim[1], xlim[2], 0.2), labels=paste(seq(xlim[1], xlim[2], 0.2)*100,"%", sep=""), tck=0)
@@ -1037,6 +1102,7 @@ server <- function(input, output, session) {
         }
         
         if(unit.persistence.focal!="none"){
+          
           for(gcm in gcms){
             i=which(gcms==gcm)
             x2 <- persistence[c(1, which(period[,1]==gcm)), which(names(persistence)==unit.persistence.focal)]
@@ -1054,9 +1120,19 @@ server <- function(input, output, session) {
             points(x2,y2, pch=21, bg=ColScheme.gcms[i], cex=1)
             points(x2[j],y2[j], pch=21, bg=ColScheme.gcms[i], cex=if(gcm==gcm.focal) 3.5 else 3)
             text(x2[j],y2[j], mods[i], cex=if(gcm==gcm.focal) 0.7 else 0.5, font=2)
+          }          
+          
+          if(recent==T){
+            x1 <- persistence[2, which(names(persistence)==unit.persistence.focal)]
+            y1 <- expansion[2, which(names(expansion)==unit.persistence.focal)]
+            y1[y1<2^(ylim[1])] <- 2^(ylim[1])
+            y1 <- log2(y1)
+            points(x1,y1, pch=21, bg="gray", col=1, cex=2)
+            text(x1,y1, "2001-2020 (observed)", cex=1, font=2, pos=4, col="gray30", offset=0.7)  
           }
+          
         }
-        
+        box()
         
       }
     } else if(input$type==3){ 
@@ -1227,8 +1303,52 @@ server <- function(input, output, session) {
         
       }
     }
-  },
-  height=reactive(ifelse(!is.null(input$innerWidth),input$innerWidth*0.25,0))
+  }
+  output$scatterPlot <- renderPlot({ scatterPlot() },
+                                   height=reactive(ifelse(!is.null(input$innerWidth),input$innerWidth*0.25,0))
+  )
+  
+  # Plot download
+  output$downloadPlot <- downloadHandler(
+    filename =  function(){
+      paste(studyarea, 
+            if(input$type==1){
+              paste(
+                "climate",
+                input$var1, 
+                input$var2, 
+                sep="."
+              )
+            } else if(input$type==2){
+              paste(
+                "bgc", 
+                if(input$plotbgc==1){
+                  paste("area", if(input$zonelevel==T) input$zone.area.focal else input$bgc.area.focal, sep=".")
+                } else {
+                  paste("persistence", if(input$zonelevel==T) input$zone.persistence.focal else input$bgc.persistence.focal, sep=".")
+                },
+                sep="."
+              )
+            } else if(input$type==3){
+              paste(
+                "spp",
+                sep="."
+              )
+            },
+            proj.years[as.numeric(input$proj.year)+1], 
+            "png", sep=".")
+    },
+    
+    content = function(file) {
+      
+      pixelratio <- session$clientData$pixelratio
+      width  <- session$clientData$output_scatterPlot_width
+      height <- session$clientData$output_scatterPlot_height
+      
+      png(file, width = width*pixelratio*1.5, height = height*pixelratio*2, res = 120*pixelratio)
+      scatterPlot()
+      dev.off()
+    }
   )
   
   #-------------------------
