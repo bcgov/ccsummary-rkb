@@ -5,8 +5,9 @@ account: bcgov-env
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 5503598
-bundleId: 5504407
+bundleId: 6804977
 url: https://bcgov-env.shinyapps.io/ccsummary-RKB/
-when: 1643077360.09054
+when: 1675400488.22618
+lastSyncTime: 1675400488.22619
 asMultiple: FALSE
 asStatic: FALSE
